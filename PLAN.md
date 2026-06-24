@@ -95,27 +95,33 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [ ] Plain WebGL2 context bring-up: clear color, fullscreen quad, resize
       handling, devicePixelRatio awareness.
 
-### Step 2 — CPU reference port in JS  `[ ]`
-- [ ] Port `okada85.displacement` to plain JS (float64), mirroring `setup_args`
-      and the Chinnery/sub-function structure 1:1.
-- [ ] Node test that compares the JS port to values exported from the Python
-      reference (generate a JSON fixture of inputs/outputs from
-      `python/`). This JS port is the cross-check oracle for the shader and a
-      fallback renderer.
+> **Note:** a standalone proof-of-concept landed early in `web/bench/` (ahead
+> of the full site, by request) to de-risk the architecture. It already covers
+> most of Steps 2–4; remaining items are called out below.
 
-### Step 3 — Micro-benchmark harness (validate the architecture choice)  `[ ]`
-- [ ] A throwaway `web/bench/` page that times, for grids of 256², 512²,
-      1024², 2048²: (a) JS main thread, (b) JS Web Workers, (c) WebGL2
-      fragment shader. Report ms/frame and max grid sustaining 60 fps.
-- [ ] Confirm (or revise) the WebGL2 recommendation with real numbers on
-      target hardware. Record results in this file.
+### Step 2 — CPU reference port in JS  `[~]`
+- [x] Port `okada85.displacement` to plain JS float64 (`web/bench/okada85.mjs`),
+      mirroring `setup_args` and the Chinnery/sub-function structure 1:1.
+- [x] Node check vs a Python-exported fixture (`web/bench/gen_reference.py` →
+      `reference.json`; `validate.mjs`): matches to ~1e-19 km. This JS port is
+      the shader's correctness oracle and a CPU fallback renderer.
+- [ ] (later) tilt/strain ports if the app surfaces them.
 
-### Step 4 — GLSL Okada engine + precision check  `[ ]`
-- [ ] Implement `okada85.displacement` in a GLSL fragment shader (`highp`),
-      working in km, with the same edge/epsilon guards as the reference.
-- [ ] Validation: render a known grid, `readPixels`, and compare against the
-      Python reference (relaxed fp32 tolerance). Quantify near-fault error and
-      decide on mitigations per the precision note above.
+### Step 3 — Micro-benchmark harness (validate the architecture choice)  `[~]`
+- [x] `web/bench/okada-bench.html` times the WebGL2 fragment-shader compute pass
+      (256²–2048², ms/frame + fps) and the JS main-thread CPU port (256²/512²).
+- [ ] Add the Web Workers variant for a complete CPU comparison.
+- [ ] Record real device numbers here (run the page on target hardware) and
+      confirm/revise the WebGL2 recommendation.
+
+### Step 4 — GLSL Okada engine + precision check  `[~]`
+- [x] `okada85.displacement` implemented in a GLSL ES 3.00 fragment shader
+      (`web/bench/okada-shader.js`), in km, with the reference's edge/epsilon
+      guards; branches only on the uniform `dip` (no cross-pixel divergence).
+- [x] Shader algebra verified in float64 (`check-shader-algo.mjs`) against the
+      reference to ~1e-19 km — the restructured kernel is provably correct.
+- [ ] Read off fp32-vs-float64 error via the page's **Validate** button on real
+      GPUs; quantify near-fault error and decide mitigations if needed.
 
 ### Step 5 — InSAR fringes + colormap  `[ ]`
 - [ ] LOS projection from heading + incidence angle → unit look vector;

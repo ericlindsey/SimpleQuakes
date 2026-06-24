@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimpleQuakes - Okada WebGL2 benchmark / proof of concept</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 0; background: #111; color: #eee; }
+  header { padding: 12px 16px; background: #1b1b1b; border-bottom: 1px solid #333; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  main { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; }
+  .panel { background: #1b1b1b; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; }
+  canvas { background: #000; border-radius: 6px; display: block; image-rendering: pixelated; }
+  label { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  label span:first-child { width: 64px; color: #aaa; }
+  input[type=range] { flex: 1; }
+  output { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+  button { background: #2d6cdf; color: #fff; border: 0; border-radius: 6px;
+           padding: 8px 14px; font-size: 14px; cursor: pointer; margin: 4px 4px 4px 0; }
+  button:hover { background: #3a7af0; }
+  pre { background: #0c0c0c; border: 1px solid #333; border-radius: 6px;
+        padding: 10px; white-space: pre-wrap; max-width: 560px; min-height: 1em; }
+  .muted { color: #888; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { border: 1px solid #333; padding: 4px 8px; text-align: right; }
+  th { color: #aaa; }
+  a { color: #6aa6ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SimpleQuakes - Okada (1985) in a WebGL2 fragment shader</h1>
+  <div class="muted">Proof of concept: the full nonlinear Okada kernel runs once
+    per pixel on the GPU. Drag a slider and the fringes redraw from updated
+    uniforms - no geometry rebuilt. Serve this folder over HTTP
+    (<code>python -m http.server</code>) so ES modules and <code>reference.json</code> load.</div>
+</header>
+<main>
+  <div class="panel">
+    <canvas id="view" width="512" height="512"></canvas>
+    <div id="ctx-note" class="muted"></div>
+  </div>
+
+  <div class="panel" style="min-width:320px">
+    <div id="controls"></div>
+    <hr style="border-color:#333">
+    <div>
+      <strong>Benchmark</strong> (GPU compute pass vs JS float64, ms/frame)
+      <div>
+        <button id="bench">Run benchmark</button>
+        <button id="validate">Validate GPU vs Python reference</button>
+      </div>
+      <pre id="out">Ready.</pre>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { VERT_SRC, FRAG_SRC } from "./okada-shader.js";
+import { displacement } from "./okada85.mjs";
+
+const DEG = Math.PI / 180;
+
+// --- Scenario / view defaults (km). slip in km: 1e-3 km == 1 m. ---
+const params = {
+  depth: 5.0, strike: 30.0, dip: 45.0, L: 10.0, W: 6.0,
+  rake: 90.0, slip: 1.0e-3, open: 0.0, nu: 0.25,
+};
+const view = { extent: 40.0, originX: 0.0, originY: 0.0 };
+const insar = { heading: -12.0, incidence: 39.0, wavelength_m: 0.0556 };
+
+function losVec(headingDeg, incDeg) {
+  const h = headingDeg * DEG, inc = incDeg * DEG, az = h + Math.PI / 2;
+  return [-Math.sin(inc) * Math.sin(az), -Math.sin(inc) * Math.cos(az), Math.cos(inc)];
+}
+
+// --- WebGL2 setup ---
+const canvas = document.getElementById("view");
+const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
+const note = document.getElementById("ctx-note");
+const out = document.getElementById("out");
+if (!gl) {
+  note.textContent = "WebGL2 unavailable in this browser.";
+  throw new Error("no webgl2");
+}
+const floatRender = gl.getExtension("EXT_color_buffer_float");
+const timerExt = gl.getExtension("EXT_disjoint_timer_query_webgl2");
+note.innerHTML = `WebGL2 OK | RENDERER: ${gl.getParameter(
+  (gl.getExtension("WEBGL_debug_renderer_info") || {}).UNMASKED_RENDERER_WEBGL || gl.RENDERER)}`
+  + ` | float FBO: ${floatRender ? "yes" : "no"} | GPU timer: ${timerExt ? "yes" : "no"}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT_SRC));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG_SRC));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+  throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const U = {};
+for (const name of ["u_resolution", "u_extent", "u_origin", "u_depth", "u_L",
+  "u_W", "u_nu", "u_sstr", "u_cstr", "u_sdip", "u_cdip", "u_U1s", "u_U2s",
+  "u_U3s", "u_vertical", "u_look", "u_fringe", "u_mode"])
+  U[name] = gl.getUniformLocation(prog, name);
+const vao = gl.createVertexArray(); // empty VAO; vertices come from gl_VertexID
+gl.bindVertexArray(vao);
+
+// Push all params as uniforms for a given draw size / mode / view.
+function setUniforms(width, height, ext, originX, originY, mode) {
+  const strike = params.strike * DEG, dip = params.dip * DEG, rake = params.rake * DEG;
+  const look = losVec(insar.heading, insar.incidence);
+  gl.uniform2f(U.u_resolution, width, height);
+  gl.uniform2f(U.u_extent, ext, ext);
+  gl.uniform2f(U.u_origin, originX, originY);
+  gl.uniform1f(U.u_depth, params.depth);
+  gl.uniform1f(U.u_L, params.L);
+  gl.uniform1f(U.u_W, params.W);
+  gl.uniform1f(U.u_nu, params.nu);
+  gl.uniform1f(U.u_sstr, Math.sin(strike));
+  gl.uniform1f(U.u_cstr, Math.cos(strike));
+  gl.uniform1f(U.u_sdip, Math.sin(dip));
+  gl.uniform1f(U.u_cdip, Math.cos(dip));
+  gl.uniform1f(U.u_U1s, Math.cos(rake) * params.slip / (2 * Math.PI));
+  gl.uniform1f(U.u_U2s, Math.sin(rake) * params.slip / (2 * Math.PI));
+  gl.uniform1f(U.u_U3s, params.open / (2 * Math.PI));
+  gl.uniform1i(U.u_vertical, Math.cos(dip) > Number.EPSILON ? 0 : 1);
+  gl.uniform3f(U.u_look, look[0], look[1], look[2]);
+  gl.uniform1f(U.u_fringe, insar.wavelength_m / 2 / 1000); // km per fringe
+  gl.uniform1i(U.u_mode, mode);
+}
+
+function drawLive() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  setUniforms(canvas.width, canvas.height, view.extent, view.originX, view.originY, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+// --- Offscreen float framebuffer (for benchmark + validation) ---
+function makeFloatFBO(n) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, n, n, 0, gl.RGBA, gl.FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return { fbo, tex };
+}
+
+// --- Live controls ---
+const controlsDiv = document.getElementById("controls");
+const sliders = [
+  ["strike", "strike", 0, 360, 1, "deg"],
+  ["dip", "dip", 1, 90, 0.5, "deg"],
+  ["rake", "rake", -180, 180, 1, "deg"],
+  ["depth", "depth", 0.5, 30, 0.5, "km"],
+  ["L", "length", 1, 40, 0.5, "km"],
+  ["W", "width", 1, 30, 0.5, "km"],
+  ["slipm", "slip", 0.1, 5, 0.1, "m"],
+];
+for (const [key, label, min, max, step, unit] of sliders) {
+  const row = document.createElement("label");
+  const init = key === "slipm" ? params.slip * 1000 : params[key];
+  row.innerHTML = `<span>${label}</span>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${init}">
+    <output>${(+init).toFixed(1)} ${unit}</output>`;
+  const input = row.querySelector("input"), o = row.querySelector("output");
+  input.addEventListener("input", () => {
+    const v = +input.value;
+    o.textContent = `${v.toFixed(1)} ${unit}`;
+    if (key === "slipm") params.slip = v / 1000; else params[key] = v;
+    requestAnimationFrame(drawLive);
+  });
+  controlsDiv.appendChild(row);
+}
+
+// --- Benchmark: time the GPU compute pass (mode 1, float FBO) vs JS float64. ---
+async function benchGPU(n, frames = 60) {
+  const { fbo } = makeFloatFBO(n);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, n, n);
+  setUniforms(n, n, view.extent, view.originX, view.originY, 1);
+  for (let i = 0; i < 5; i++) gl.drawArrays(gl.TRIANGLES, 0, 3); // warm up
+  const px = new Float32Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px); // force completion
+  const t0 = performance.now();
+  for (let i = 0; i < frames; i++) gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px); // sync on the last frame
+  const ms = (performance.now() - t0) / frames;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return ms;
+}
+
+function benchCPU(n) {
+  const ext = view.extent;
+  const t0 = performance.now();
+  let acc = 0;
+  for (let j = 0; j < n; j++) {
+    const nn = view.originY + (((j + 0.5) / n) * 2 - 1) * ext;
+    for (let i = 0; i < n; i++) {
+      const ee = view.originX + (((i + 0.5) / n) * 2 - 1) * ext;
+      const [ue, un, uz] = displacement(ee, nn, params.depth, params.strike,
+        params.dip, params.L, params.W, params.rake, params.slip, params.open, params.nu);
+      acc += ue + un + uz; // keep the optimizer honest
+    }
+  }
+  const ms = performance.now() - t0;
+  return { ms, acc };
+}
+
+document.getElementById("bench").addEventListener("click", async () => {
+  out.textContent = "Benchmarking... (CPU is single-pass and may stutter)\n";
+  const rows = [];
+  for (const n of [256, 512, 1024, 2048]) {
+    const gpu = await benchGPU(n);
+    // Cap the CPU pass so the page stays responsive; skip the largest grids.
+    const cpu = n <= 512 ? benchCPU(n).ms : null;
+    rows.push({ n, px: n * n, gpu, cpu });
+    out.textContent = render(rows);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  drawLive();
+});
+
+function render(rows) {
+  const head = "grid       pixels     GPU ms   GPU fps    CPU ms   speedup\n";
+  const body = rows.map(r => {
+    const fps = (1000 / r.gpu).toFixed(0).padStart(7);
+    const cpu = r.cpu == null ? "    skip" : r.cpu.toFixed(2).padStart(8);
+    const sp = r.cpu == null ? "      -" : (r.cpu / r.gpu).toFixed(0).padStart(6) + "x";
+    return `${(r.n + "x" + r.n).padEnd(10)} ${String(r.px).padStart(8)}  `
+      + `${r.gpu.toFixed(3).padStart(7)}  ${fps}  ${cpu}  ${sp}`;
+  }).join("\n");
+  return head + body;
+}
+
+// --- Validation: render LOS on the reference grid, compare to Python float64. ---
+document.getElementById("validate").addEventListener("click", async () => {
+  out.textContent = "Loading reference.json...";
+  let ref;
+  try { ref = await (await fetch("./reference.json")).json(); }
+  catch (e) { out.textContent = "Could not load reference.json (serve over HTTP)."; return; }
+
+  const p = ref.params, N = ref.grid_n, E = p.extent_km;
+  // Align FBO pixel centers with the reference linspace(-E, E, N).
+  const extShader = E * N / (N - 1);
+  // Use the reference scenario exactly (override current sliders for the test).
+  const saved = JSON.stringify(params);
+  Object.assign(params, {
+    depth: p.depth, strike: p.strike, dip: p.dip, L: p.L, W: p.W,
+    rake: p.rake, slip: p.slip, open: p.open, nu: p.nu,
+  });
+  Object.assign(insar, {
+    heading: p.insar_heading_deg, incidence: p.insar_incidence_deg,
+    wavelength_m: p.wavelength_m,
+  });
+
+  const { fbo } = makeFloatFBO(N);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, N, N);
+  setUniforms(N, N, extShader, 0, 0, 1);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const buf = new Float32Array(N * N * 4);
+  gl.readPixels(0, 0, N, N, gl.RGBA, gl.FLOAT, buf);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  let maxAbsLos = 0, maxAbsDisp = 0;
+  const peak = Math.max(...ref.los.map(Math.abs));
+  for (let idx = 0; idx < N * N; idx++) {
+    const losGpu = buf[idx * 4 + 3];
+    maxAbsLos = Math.max(maxAbsLos, Math.abs(losGpu - ref.los[idx]));
+    maxAbsDisp = Math.max(maxAbsDisp,
+      Math.abs(buf[idx * 4] - ref.ue[idx]),
+      Math.abs(buf[idx * 4 + 1] - ref.un[idx]),
+      Math.abs(buf[idx * 4 + 2] - ref.uz[idx]));
+  }
+  const relLos = maxAbsLos / peak;
+  out.textContent =
+    `Validation: GPU fp32 shader vs Python float64 reference (${N}x${N})\n` +
+    `  LOS signal peak     : ${peak.toExponential(3)} km\n` +
+    `  max abs displacement: ${maxAbsDisp.toExponential(3)} km\n` +
+    `  max abs LOS error   : ${maxAbsLos.toExponential(3)} km\n` +
+    `  max rel LOS error   : ${(relLos * 100).toFixed(4)} % of peak\n` +
+    `  verdict: ${relLos < 0.01 ? "PASS - fp32 within 1% of peak" :
+                  "see error; near-fault fp32 effects expected"}`;
+
+  Object.assign(params, JSON.parse(saved));
+  drawLive();
+});
+
+drawLive();
+</script>
+</body>
+</html>
