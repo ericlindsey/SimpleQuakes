@@ -13,10 +13,12 @@ Python reference).
 
 ## Status
 
-Early development. The deformation reference engine and project plan are in
-place; the web app is being built next. See [`PLAN.md`](PLAN.md) for the
-roadmap and the rationale for the chosen rendering approach (a WebGL2 fragment
-shader that runs the Okada solution per pixel on the GPU).
+Interactive site is up: a full-window WebGL2 canvas with a translucent control
+panel — continuous sliders (with exact-entry boxes) for the fault and InSAR
+geometry, wrapped-fringe / LOS / E / N / Up views, pan & zoom, a fault overlay,
+presets, and shareable URL state. The Okada solution runs per pixel in a
+fragment shader, validated against the Python reference. See [`PLAN.md`](PLAN.md)
+for the roadmap and the rationale for the rendering approach.
 
 ## Layout
 
@@ -24,8 +26,24 @@ shader that runs the Okada solution per pixel on the GPU).
 python/   Reference Okada (1985) implementation + tests (NumPy, float64).
           The trusted source of truth used to validate the browser engine.
           Not shipped to the browser.
-web/      The static site (added during development; see PLAN.md).
+web/      The static site.
+          index.html + app.js   the interactive app
+          okada-shader.js        the GLSL Okada engine (shared)
+          bench/                 proof-of-concept + GPU/CPU benchmark + validation
 ```
+
+## Run the site locally
+
+ES modules need HTTP (not `file://`):
+
+```bash
+cd web
+python -m http.server 8000
+# open http://localhost:8000/
+```
+
+Deployment to GitHub Pages is automated (`.github/workflows/pages.yml`); enable
+it once via Settings → Pages → Source = "GitHub Actions".
 
 ## Reference engine (Python)
 

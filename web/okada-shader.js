@@ -1,10 +1,12 @@
-// GLSL ES 3.00 (WebGL2) port of okada85.displacement, plus InSAR LOS + fringe
-// colormap. fp32 throughout (browser shaders have no f64). Branches key only on
-// `u_vertical`, a uniform derived from dip, so control flow never diverges
-// across pixels -- the GPU-friendly property that makes the nonlinear Okada
-// kernel parallelize cleanly.
+// GLSL ES 3.00 (WebGL2) port of okada85.displacement, plus InSAR LOS, fringe /
+// amplitude colormaps, and a fault-outline overlay. fp32 throughout (browser
+// shaders have no f64). Branches key only on `u_vertical`, a uniform derived
+// from dip, so control flow never diverges across pixels -- the GPU-friendly
+// property that makes the nonlinear Okada kernel parallelize cleanly.
 //
-// Exported as strings so the harness (okada-bench.html) can compile them.
+// Shared by the app (web/index.html) and the benchmark (web/bench/). The
+// numeric core is validated against the Python reference; the `u_mode==1` path
+// returns raw displacement before any display code runs.
 
 export const VERT_SRC = `#version 300 es
 // Fullscreen triangle from gl_VertexID; no attribute buffers needed.
@@ -28,7 +30,14 @@ uniform float u_U1s, u_U2s, u_U3s;             // pre-scaled slip components
 uniform int   u_vertical;                      // 1 if cos(dip) ~ 0
 uniform vec3  u_look;                           // InSAR LOS unit vector (E,N,U)
 uniform float u_fringe;                         // range change per fringe (km)
-uniform int   u_mode;                           // 0 = colormap, 1 = raw floats
+uniform int   u_mode;                           // 0 = display, 1 = raw floats
+
+// Display controls (ignored when u_mode == 1).
+uniform int   u_view;       // 0 fringes, 1 LOS, 2 East, 3 North, 4 Up
+uniform float u_ampScale;   // full-scale (km) for the diverging colormap
+uniform int   u_showFault;  // 1 to draw the fault-outline overlay
+uniform vec2  u_c0, u_c1, u_c2, u_c3; // surface-projected fault corners (km)
+uniform float u_kmPerPx;    // view scale, for constant-width overlay lines
 
 out vec4 outColor;
 
@@ -140,6 +149,20 @@ vec3 fringeColor(float t) {
   return 0.5 + 0.5 * vec3(cos(a), cos(a - 2.09439510239), cos(a - 4.18879020479));
 }
 
+// Diverging blue-white-red colormap for signed amplitude, x in [-1, 1].
+vec3 divergingColor(float x) {
+  x = clamp(x, -1.0, 1.0);
+  if (x < 0.0) return mix(vec3(1.0), vec3(0.23, 0.30, 0.75), -x);
+  return mix(vec3(1.0), vec3(0.71, 0.09, 0.16), x);
+}
+
+// Distance from point p to segment a-b.
+float segDist(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-12), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
 void main() {
   vec2 ndc = gl_FragCoord.xy / u_resolution;       // 0..1, pixel centers
   float e = u_origin.x + (ndc.x * 2.0 - 1.0) * u_extent.x;
@@ -152,6 +175,27 @@ void main() {
     outColor = vec4(disp, los);                    // raw, for validation
     return;
   }
-  float phase = fract(los / u_fringe);
-  outColor = vec4(fringeColor(phase), 1.0);
+
+  vec3 col;
+  if (u_view == 0) {
+    col = fringeColor(fract(los / u_fringe));      // wrapped interferogram
+  } else {
+    float val = (u_view == 1) ? los
+              : (u_view == 2) ? disp.x
+              : (u_view == 3) ? disp.y : disp.z;
+    col = divergingColor(val / u_ampScale);        // signed amplitude
+  }
+
+  if (u_showFault == 1) {
+    vec2 P = vec2(e, n);
+    float dTop = segDist(P, u_c0, u_c1);           // top edge = fault trace
+    float dRest = min(min(segDist(P, u_c1, u_c2), segDist(P, u_c2, u_c3)),
+                      segDist(P, u_c3, u_c0));
+    float aa = u_kmPerPx;
+    float rest = 1.0 - smoothstep(1.5 * aa, 2.5 * aa, dRest);
+    float top = 1.0 - smoothstep(2.5 * aa, 3.5 * aa, dTop);
+    col = mix(col, vec3(0.05), rest * 0.85);
+    col = mix(col, vec3(1.0), top);
+  }
+  outColor = vec4(col, 1.0);
 }`;

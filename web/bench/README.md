@@ -51,7 +51,7 @@ instead of GPU execution — now fixed; re-run for honest per-frame GPU time.
 
 | File | Role |
 |------|------|
-| `okada-shader.js` | GLSL ES 3.00 port of `displacement` + LOS + fringe colormap |
+| `../okada-shader.js` | GLSL ES 3.00 port of `displacement` + LOS + colormaps (shared with the app) |
 | `okada85.mjs` | float64 JS port (CPU baseline **and** correctness oracle) |
 | `okada-bench.html` | WebGL2 harness: live view, benchmark, validation |
 | `gen_reference.py` | writes `reference.json` from the Python float64 engine |

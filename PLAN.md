@@ -92,14 +92,15 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [x] Adapt `CLAUDE.md` / `AGENTS.md` for a web-first repo; add `.gitignore`.
 - [x] Write this `PLAN.md`.
 
-### Step 1 — Static site skeleton  `[ ]`
-- [ ] Create `web/` with `index.html`, a single `<canvas>`, and a controls
-      panel (sliders for strike, dip, rake, depth, length, width, slip; plus
-      InSAR heading/incidence and wavelength).
-- [ ] Decide tooling: start with **zero-build** (ES modules + plain JS) for
-      maximum GitHub Pages simplicity; introduce Vite only if needed.
-- [ ] Plain WebGL2 context bring-up: clear color, fullscreen quad, resize
-      handling, devicePixelRatio awareness.
+### Step 1 — Static site  `[x]`
+- [x] `web/index.html` + `web/app.js`: full-window canvas with a translucent,
+      collapsible control overlay. Zero-build (ES modules + plain JS), shares
+      the validated `web/okada-shader.js`.
+- [x] **Continuous** sliders (`step="any"`) paired with exact-entry number
+      boxes, for strike/dip/rake/depth/length/width/slip/opening and InSAR
+      heading/incidence/wavelength — no stair-stepping while dragging.
+- [x] WebGL2 bring-up with devicePixelRatio (capped at 2), resize handling,
+      and `requestAnimationFrame`-coalesced redraws. Graceful no-WebGL2 notice.
 
 > **Note:** a standalone proof-of-concept landed early in `web/bench/` (ahead
 > of the full site, by request) to de-risk the architecture. It already covers
@@ -157,26 +158,28 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
       `highp` fp32 is sufficient. Re-check if extreme geometries (very shallow,
       near-vertical, observations on the fault trace) are exercised.
 
-### Step 5 — InSAR fringes + colormap  `[ ]`
-- [ ] LOS projection from heading + incidence angle → unit look vector;
-      range change = `dot(displacement, look)`.
-- [ ] Wrap to phase modulo λ/2 (default Sentinel-1 C-band, λ≈5.6 cm) and apply
-      a cyclic colormap; toggle between wrapped fringes / unwrapped LOS / up /
-      east / north.
-- [ ] Scale bar, fault outline overlay, north arrow.
+### Step 5 — InSAR fringes + colormap  `[x]`
+- [x] LOS projection from heading + incidence → unit look vector; range change
+      = `dot(displacement, look)`.
+- [x] Wrap to phase modulo λ/2 (cyclic colormap) with adjustable wavelength
+      (C-band default ≈5.6 cm); view toggle between wrapped fringes / unwrapped
+      LOS / East / North / Up (diverging colormap with adjustable saturation).
+- [x] Fault-outline overlay (surface-projected rectangle, bright top edge) and
+      an in-panel colorbar legend. (North arrow / scale bar: still to add.)
 
-### Step 6 — Interaction polish  `[ ]`
-- [ ] Live slider → uniform updates with `requestAnimationFrame` coalescing
-      (don't redraw more than once per frame).
-- [ ] Pan/zoom of the map extent (updates the quad's `(e,n)` mapping uniforms,
-      not the geometry).
-- [ ] Numeric readouts, shareable URL state (params encoded in the query
-      string / hash), and sensible defaults / presets (e.g. a Mw 7 strike-slip).
+### Step 6 — Interaction polish  `[~]`
+- [x] Live slider → uniform updates with `requestAnimationFrame` coalescing.
+- [x] Pan (drag) / zoom (wheel, about the cursor) of the map extent via the
+      `(e,n)` mapping uniforms, not geometry.
+- [x] Numeric readout, shareable URL state (params in `location.hash`),
+      presets (strike-slip / thrust / normal / dike / shallow dip-slip).
+- [ ] Nice-to-have: keyboard nudges, mobile pinch-zoom, North arrow + scale bar.
 
-### Step 7 — Ship on GitHub Pages  `[ ]`
-- [ ] GitHub Actions workflow (or Pages-from-branch) to publish `web/` (or
-      `dist/`) to `*.github.io`.
-- [ ] README with screenshot/GIF and usage.
+### Step 7 — Ship on GitHub Pages  `[~]`
+- [x] GitHub Actions workflow (`.github/workflows/pages.yml`) publishing `web/`
+      as the site root on push to `main`.
+- [ ] One-time: enable Pages (Settings → Pages → Source = GitHub Actions);
+      then add the live URL + a screenshot/GIF to the README.
 
 ### Step 8 — Optional extensions  `[ ]`
 - [ ] GNSS-style displacement vector arrows overlaid on fringes.
