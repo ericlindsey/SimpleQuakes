@@ -113,18 +113,36 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
       the shader's correctness oracle and a CPU fallback renderer.
 - [ ] (later) tilt/strain ports if the app surfaces them.
 
-### Step 3 — Micro-benchmark harness (validate the architecture choice)  `[~]`
+### Step 3 — Micro-benchmark harness (validate the architecture choice)  `[x]`
 - [x] `web/bench/okada-bench.html` times the WebGL2 fragment-shader compute pass
       (256²–2048², ms/frame + fps) and the JS main-thread CPU port (256²/512²).
 - [x] Fixed GPU timing to use `EXT_disjoint_timer_query` (true GPU
       time-elapsed), with a per-frame-sync fallback. The first pass used a
       single end-of-loop sync, which measured CPU dispatch (non-monotonic,
       implausibly fast) rather than GPU execution.
-- [ ] Add the Web Workers variant for a complete CPU comparison (low priority
-      now: GPU dominance is unambiguous — even dispatch-bound it was sub-ms,
-      and the CPU port is ~100–300 ms at 256²–512²).
-- [ ] Record accurate on-device numbers here after re-running with the
-      timer-query path.
+- [x] **On-device baseline recorded — Apple M3 Pro (Chrome/ANGLE-Metal),
+      timer-query path:**
+
+      | grid  | pixels    | GPU ms/frame | throughput |
+      |-------|-----------|--------------|------------|
+      | 256²  | 65,536    | ~0.001 (floor) | ~65 Gpix/s |
+      | 512²  | 262,144   | ~0.001 (floor) | underutilized |
+      | 1024² | 1,048,576 | 0.009        | ~116 Gpix/s |
+      | 2048² | 4,194,304 | 0.039        | ~107 Gpix/s |
+
+      CPU JS port for comparison: 256² ≈ 105 ms, 512² ≈ 295 ms (≈10⁵× slower).
+      The 1024²→2048² step scales linearly in area (4× pixels → 4.33× time),
+      confirming a genuine compute-bound measurement. Small grids pin to the
+      ~1 µs timer floor because there is too little work to saturate the GPU
+      (throughput, not ms, is the meaningful axis there). **Conclusion:**
+      WebGL2 has ~100–400× headroom over 60 fps at full-screen resolution; a 4K
+      fringe field (~8.3M px) recomputes in ~0.08 ms. Performance is a
+      non-constraint — confirmed, not assumed. The GPU is this fast because the
+      kernel is pure-ALU, divergence-free, near-zero memory traffic, and Metal
+      compiles transcendentals with fast-math approximations (also why fp32
+      error is ~0.003% rather than near-zero).
+- [ ] (optional) Web Workers CPU variant — deprioritized; GPU dominance is
+      unambiguous and the CPU path is only a fallback/oracle.
 
 ### Step 4 — GLSL Okada engine + precision check  `[x]`
 - [x] `okada85.displacement` implemented in a GLSL ES 3.00 fragment shader
