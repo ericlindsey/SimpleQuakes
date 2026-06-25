@@ -176,6 +176,15 @@ void main() {
     return;
   }
 
+  // Okada (1985) is singular along the fault's surface trace, where a buried
+  // dislocation projects to z=0: denominators vanish and displacement blows up
+  // (and can produce NaN/Inf). Flag pixels whose displacement is unphysically
+  // large -- the "!(mag < T)" form is also true for NaN -- and paint them a
+  // neutral gray instead of letting the colormap speckle. Two comparisons per
+  // pixel; no measurable cost.
+  float mag = max(max(abs(disp.x), abs(disp.y)), abs(disp.z));
+  bool singular = !(mag < 0.02);                   // > 20 m, or NaN/Inf
+
   vec3 col;
   if (u_view == 0) {
     col = fringeColor(fract(los / u_fringe));      // wrapped interferogram
@@ -185,6 +194,7 @@ void main() {
               : (u_view == 3) ? disp.y : disp.z;
     col = divergingColor(val / u_ampScale);        // signed amplitude
   }
+  if (singular) col = vec3(0.45);
 
   if (u_showFault == 1) {
     vec2 P = vec2(e, n);

@@ -41,6 +41,16 @@
     color: #f0f0f2; border-radius: 6px; padding: 2px 4px; font: inherit; }
   input[type=number]:focus { outline: 1px solid #4b8bff; border-color: #4b8bff; }
 
+  .ctl-lab { color: #c7ccd8; margin: 7px 0 3px; }
+  details.adv { margin-top: 7px; }
+  details.adv summary { cursor: pointer; color: #9aa3b4; font-size: 11px; list-style: none; }
+  details.adv summary::-webkit-details-marker { display: none; }
+  details.adv summary::before { content: "▸ "; }
+  details.adv[open] summary::before { content: "▾ "; }
+  #aboutbox { display: none; margin-top: 10px; color: #d2d6e0; }
+  #aboutbox p { margin: 8px 0; }
+  #aboutbox code { background: rgba(255,255,255,0.08); padding: 0 4px; border-radius: 4px; }
+  #aboutlink { cursor: pointer; }
   .seg { display: flex; flex-wrap: wrap; gap: 4px; }
   .seg button { flex: 1 1 auto; min-width: 52px; padding: 5px 6px;
     background: rgba(255, 255, 255, 0.07); color: #d8dce6;
@@ -61,9 +71,10 @@
   .hint { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
     color: rgba(255, 255, 255, 0.5); font-size: 11px; pointer-events: none;
     background: rgba(0,0,0,0.25); padding: 3px 10px; border-radius: 20px; }
-  #readout { position: fixed; bottom: 10px; right: 12px; color: rgba(255,255,255,0.6);
-    font-size: 11px; font-variant-numeric: tabular-nums; text-align: right;
-    background: rgba(0,0,0,0.25); padding: 4px 9px; border-radius: 8px; }
+  #readout { position: fixed; bottom: 10px; left: 12px; color: rgba(255,255,255,0.72);
+    font-size: 11px; font-variant-numeric: tabular-nums; text-align: left; max-width: 60vw;
+    background: rgba(0,0,0,0.32); padding: 4px 9px; border-radius: 8px; }
+  #readout b { color: #fff; }
   a { color: #6aa6ff; }
 </style>
 </head>
@@ -79,8 +90,22 @@
 
 <div class="panel" id="panel">
   <div class="phead">
-    <h1>SimpleQuakes <small>Okada 1985</small></h1>
+    <h1>SimpleQuakes <small>Okada 1985 · <a id="aboutlink">about</a></small></h1>
     <button id="collapse" title="Collapse / expand">–</button>
+  </div>
+  <div id="aboutbox">
+    <p>This page computes the surface deformation produced by a single
+    rectangular fault (a dislocation in an elastic half-space, <b>Okada 1985</b>)
+    and shows it the way a satellite radar would — as <b>InSAR fringes</b>.</p>
+    <p>The whole solution runs <b>per pixel on your GPU</b> in a WebGL2 fragment
+    shader, so moving a slider just updates a few numbers and the image redraws
+    in real time. Each color cycle in the default view is one fringe =
+    <code>λ/2</code> of motion toward/away from the satellite.</p>
+    <p>The fault's surface trace is masked in gray, where the Okada solution is
+    singular. The in-browser engine is validated against a double-precision
+    Python reference. Source &amp; details:
+    <a href="https://github.com/ericlindsey/SimpleQuakes" target="_blank" rel="noopener">github.com/ericlindsey/SimpleQuakes</a>.</p>
+    <p><a id="aboutback">← back to controls</a></p>
   </div>
   <div id="body">
     <div class="group"><div class="gtitle">Fault</div><div id="fault"></div></div>

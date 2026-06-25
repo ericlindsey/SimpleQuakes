@@ -166,13 +166,21 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
       LOS / East / North / Up (diverging colormap with adjustable saturation).
 - [x] Fault-outline overlay (surface-projected rectangle, bright top edge) and
       an in-panel colorbar legend. (North arrow / scale bar: still to add.)
+- [x] Mask the Okada surface-trace singularity: flag pixels with |disp| > 20 m
+      (the `!(mag < T)` test also catches NaN/Inf) and paint them neutral gray.
+      Two comparisons per pixel — no measurable cost.
 
 ### Step 6 — Interaction polish  `[~]`
 - [x] Live slider → uniform updates with `requestAnimationFrame` coalescing.
 - [x] Pan (drag) / zoom (wheel, about the cursor) of the map extent via the
       `(e,n)` mapping uniforms, not geometry.
-- [x] Numeric readout, shareable URL state (params in `location.hash`),
-      presets (strike-slip / thrust / normal / dike / shallow dip-slip).
+- [x] Numeric readout incl. moment magnitude (Mw), shareable URL state (params
+      in `location.hash`), presets (strike-slip / thrust / normal / dike /
+      shallow dip-slip).
+- [x] Semantic InSAR geometry: orbit pass (ascending/descending), look
+      direction (right/left), radar band (X/C/S/L → wavelength), incidence
+      slider, with an Advanced manual heading/λ override for unusual cases.
+- [x] In-header About panel describing how it works.
 - [ ] Nice-to-have: keyboard nudges, mobile pinch-zoom, North arrow + scale bar.
 
 ### Step 7 — Ship on GitHub Pages  `[~]`

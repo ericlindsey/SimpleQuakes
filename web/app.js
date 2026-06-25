@@ -13,7 +13,7 @@ const round2 = (v) => Math.round(v * 100) / 100;
 // ---------------------------------------------------------------- state
 const state = {
   fault: { strike: 30, dip: 45, rake: 90, depth: 5, length: 10, width: 6, slip: 1, open: 0 },
-  insar: { heading: -12, incidence: 39, wavelengthCm: 5.6 },
+  insar: { heading: -12, incidence: 34, wavelengthCm: 5.6, pass: "asc", look: "right", band: "C" },
   view: 0,            // 0 fringes, 1 LOS, 2 East, 3 North, 4 Up
   ampCm: 30,          // diverging-colormap saturation for amplitude views
   showFault: true,
@@ -30,11 +30,12 @@ const FAULT_FIELDS = [
   ["slip", "Slip", "m", 0, 15],
   ["open", "Opening", "m", 0, 10],
 ];
-const INSAR_FIELDS = [
-  ["heading", "Heading", "°", -180, 180],
-  ["incidence", "Incidence", "°", 1, 89],
-  ["wavelengthCm", "λ", "cm", 1, 40],
-];
+
+// Satellite heading by orbit pass (Sentinel-1-like, deg from north).
+const PASS_HEADING = { asc: -12, desc: 168 };
+// Radar wavelength by band, cm.
+const BAND_WAVELENGTH_CM = { X: 3.1, C: 5.6, S: 9.4, L: 23.6 };
+
 const VIEW_NAMES = ["Fringes", "LOS", "East", "North", "Up"];
 const PRESETS = {
   "Shallow dip-slip": { strike: 30, dip: 45, rake: 90, depth: 5, length: 10, width: 6, slip: 1, open: 0 },
@@ -71,8 +72,10 @@ gl.bindVertexArray(gl.createVertexArray()); // empty VAO; gl_VertexID drives the
 const U = {};
 const uniformName = (n) => (U[n] ??= gl.getUniformLocation(prog, n));
 
-function losVec(headingDeg, incDeg) {
-  const h = headingDeg * DEG, inc = incDeg * DEG, az = h + Math.PI / 2;
+// Ground-to-satellite line-of-sight unit vector (E, N, U). Right-looking puts
+// the look azimuth 90 deg clockwise of the flight heading; left-looking, 90 ccw.
+function losVec(headingDeg, incDeg, lookSign) {
+  const h = headingDeg * DEG, inc = incDeg * DEG, az = h + lookSign * Math.PI / 2;
   return [-Math.sin(inc) * Math.sin(az), -Math.sin(inc) * Math.cos(az), Math.cos(inc)];
 }
 
@@ -101,7 +104,8 @@ function render() {
   const ey = c.extent, ex = ey * W / H, kmPerPx = (2 * ey) / H;
   const strike = f.strike * DEG, dip = f.dip * DEG, rake = f.rake * DEG;
   const slipKm = f.slip / 1000, openKm = f.open / 1000;
-  const look = losVec(state.insar.heading, state.insar.incidence);
+  const look = losVec(state.insar.heading, state.insar.incidence,
+                      state.insar.look === "left" ? -1 : 1);
   const corners = faultCorners();
 
   gl.uniform2f(uniformName("u_resolution"), W, H);
@@ -176,6 +180,49 @@ function buildViewOpts() {
   if (state.view !== 0) addField(box, null, "ampCm", "Saturation", "cm", 1, 200, false);
 }
 
+// Generic labeled segmented (radio-style) control.
+function addSegmented(container, label, options, getCurrent, onSelect) {
+  const lab = document.createElement("div"); lab.className = "ctl-lab"; lab.textContent = label;
+  const seg = document.createElement("div"); seg.className = "seg";
+  const refresh = () => [...seg.children].forEach((c, i) =>
+    c.classList.toggle("active", options[i][0] === getCurrent()));
+  options.forEach(([val, text]) => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.addEventListener("click", () => { onSelect(val); refresh(); });
+    seg.append(b);
+  });
+  refresh();
+  container.append(lab, seg);
+}
+
+// Derive heading/wavelength from the semantic pass/band choices.
+function applyGeometry() {
+  state.insar.heading = PASS_HEADING[state.insar.pass];
+  state.insar.wavelengthCm = BAND_WAVELENGTH_CM[state.insar.band];
+}
+
+function buildInsar() {
+  const box = document.getElementById("insar");
+  box.textContent = "";
+  addSegmented(box, "Orbit pass", [["asc", "Ascending"], ["desc", "Descending"]],
+    () => state.insar.pass,
+    (v) => { state.insar.pass = v; applyGeometry(); refreshAll(); onChange(); });
+  addSegmented(box, "Look direction", [["right", "Right"], ["left", "Left"]],
+    () => state.insar.look,
+    (v) => { state.insar.look = v; onChange(); });
+  addSegmented(box, "Radar band", [["X", "X"], ["C", "C"], ["S", "S"], ["L", "L"]],
+    () => state.insar.band,
+    (v) => { state.insar.band = v; applyGeometry(); refreshAll(); onChange(); });
+  addField(box, "insar", "incidence", "Incidence", "°", 20, 50);
+  const det = document.createElement("details"); det.className = "adv";
+  const sum = document.createElement("summary"); sum.textContent = "Advanced (manual heading / λ)";
+  det.append(sum);
+  addField(det, "insar", "heading", "Heading", "°", -180, 180);
+  addField(det, "insar", "wavelengthCm", "λ", "cm", 1, 40);
+  box.append(det);
+}
+
 function buildSegments() {
   const seg = document.getElementById("viewseg");
   seg.textContent = "";
@@ -226,12 +273,23 @@ function updateLegend() {
   }
 }
 
+// Moment magnitude from the geodetic moment Mo = mu * d * area, with mu = 30 GPa
+// and d the displacement-discontinuity magnitude (shear slip + tensile opening).
+function momentMagnitude() {
+  const f = state.fault;
+  const d = Math.hypot(f.slip, f.open);             // m
+  const Mo = 3e10 * d * (f.length * 1000) * (f.width * 1000); // N·m
+  return Mo > 0 ? (2 / 3) * (Math.log10(Mo) - 9.1) : null;
+}
+
 function updateReadout() {
   const f = state.fault;
-  document.getElementById("readout").textContent =
-    `view ±${state.cam.extent.toFixed(1)} km · `
-    + `strike ${f.strike.toFixed(0)}° dip ${f.dip.toFixed(0)}° `
-    + `rake ${f.rake.toFixed(0)}° · slip ${f.slip.toFixed(2)} m`;
+  const mw = momentMagnitude();
+  document.getElementById("readout").innerHTML =
+    `<b>M<sub>w</sub> ${mw == null ? "—" : mw.toFixed(2)}</b> · `
+    + `strike ${f.strike.toFixed(0)}° dip ${f.dip.toFixed(0)}° rake ${f.rake.toFixed(0)}° · `
+    + `slip ${f.slip.toFixed(2)} m · ${f.length.toFixed(0)}×${f.width.toFixed(0)} km · `
+    + `view ±${state.cam.extent.toFixed(1)} km`;
 }
 
 // ------------------------------------------------------------- URL state
@@ -245,6 +303,7 @@ function writeUrl() {
   const p = new URLSearchParams();
   for (const k of Object.keys(f)) p.set(k, round2(f[k]));
   p.set("hd", round2(i.heading)); p.set("inc", round2(i.incidence)); p.set("wl", round2(i.wavelengthCm));
+  p.set("pass", i.pass); p.set("look", i.look); p.set("band", i.band);
   p.set("view", state.view); p.set("amp", round2(state.ampCm)); p.set("fl", state.showFault ? 1 : 0);
   p.set("ext", round2(c.extent)); p.set("ox", round2(c.ox)); p.set("oy", round2(c.oy));
   history.replaceState(null, "", "#" + p.toString());
@@ -258,6 +317,9 @@ function readUrl() {
   state.insar.heading = num("hd", state.insar.heading);
   state.insar.incidence = num("inc", state.insar.incidence);
   state.insar.wavelengthCm = num("wl", state.insar.wavelengthCm);
+  if (p.has("pass")) state.insar.pass = p.get("pass");
+  if (p.has("look")) state.insar.look = p.get("look");
+  if (p.has("band")) state.insar.band = p.get("band");
   state.view = clamp(Math.round(num("view", state.view)), 0, 4);
   state.ampCm = num("amp", state.ampCm);
   state.showFault = num("fl", 1) !== 0;
@@ -306,9 +368,6 @@ canvas.addEventListener("wheel", (e) => {
 // ------------------------------------------------------------- wiring
 const faultBox = document.getElementById("fault");
 for (const [k, label, unit, min, max] of FAULT_FIELDS) addField(faultBox, "fault", k, label, unit, min, max);
-const insarBox = document.getElementById("insar");
-for (const [k, label, unit, min, max] of INSAR_FIELDS) addField(insarBox, "insar", k, label, unit, min, max);
-
 const presetSel = document.getElementById("preset");
 for (const name of Object.keys(PRESETS)) presetSel.add(new Option(name, name));
 presetSel.addEventListener("change", () => {
@@ -328,11 +387,26 @@ document.getElementById("collapse").addEventListener("click", () => {
   document.getElementById("collapse").textContent = panel.classList.contains("collapsed") ? "+" : "–";
 });
 
+// About panel toggles the control body in place.
+const aboutBox = document.getElementById("aboutbox");
+const bodyEl = document.getElementById("body");
+const aboutLink = document.getElementById("aboutlink");
+function setAbout(show) {
+  aboutBox.style.display = show ? "block" : "none";
+  bodyEl.style.display = show ? "none" : "block";
+  aboutLink.textContent = show ? "controls" : "about";
+}
+aboutLink.addEventListener("click", () => setAbout(aboutBox.style.display !== "block"));
+document.getElementById("aboutback").addEventListener("click", () => setAbout(false));
+
 window.addEventListener("resize", requestRender);
-window.addEventListener("hashchange", () => { readUrl(); refreshAll(); buildSegments(); buildViewOpts(); onChange(); });
+window.addEventListener("hashchange", () => {
+  readUrl(); refreshAll(); buildInsar(); buildSegments(); buildViewOpts(); onChange();
+});
 
 // ------------------------------------------------------------- init
 readUrl();
+buildInsar();
 refreshAll();
 document.getElementById("showfault").checked = state.showFault;
 buildSegments();
