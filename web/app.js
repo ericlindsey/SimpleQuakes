@@ -47,12 +47,14 @@ const PRESETS = {
 
 // Keep the fault buried: its top edge (centroid depth − sin(dip)·W/2) must stay
 // below the surface, else the Okada solution is singular right on the pixel grid
-// and the displacement mask can't fully clean the trace. A small margin (max of
-// 50 m or 2% of width) keeps the edge clear of that exact coincidence. Bumps the
-// centroid depth up whenever depth / dip / width would breach the surface.
+// and the displacement mask can't fully clean the trace. SURFACE_MARGIN is just
+// large enough (~1 px at the default ±40 km view) to push the singular edge off
+// the surface without visibly burying the fault. Bumps the centroid depth up
+// whenever depth / dip / width would breach the surface.
+const SURFACE_MARGIN = 0.05; // km
 function constrainFault() {
   const f = state.fault;
-  const minDepth = Math.sin(f.dip * DEG) * f.width / 2 + Math.max(0.05, 0.02 * f.width);
+  const minDepth = Math.sin(f.dip * DEG) * f.width / 2 + SURFACE_MARGIN;
   if (f.depth < minDepth) f.depth = minDepth;
 }
 
@@ -181,6 +183,7 @@ function addField(container, group, key, label, unit, min, max, persistent = tru
     if (onAfter) onAfter();
     onChange();
   });
+  num.addEventListener("change", () => { num.value = round2(obj[key]); }); // tidy on blur
   sync();
   if (persistent) refreshers.push(sync);
   row.append(lab, range, num, unitEl);
@@ -281,8 +284,9 @@ function updateLegend() {
     text.textContent = `Wrapped interferogram · 1 color cycle = λ/2 = `
       + `${(state.insar.wavelengthCm / 2).toFixed(2)} cm of range change`;
   } else {
+    const amp = (+state.ampCm).toFixed(2);
     text.textContent = `${VIEW_NAMES[state.view]} displacement · `
-      + `blue −${state.ampCm} cm → red +${state.ampCm} cm`;
+      + `blue −${amp} cm → red +${amp} cm`;
   }
 }
 

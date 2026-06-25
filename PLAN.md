@@ -189,7 +189,7 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 - [ ] Nice-to-have: keyboard nudges, mobile pinch-zoom, North arrow + scale bar.
 
 ### Step 7 — Ship on GitHub Pages  `[~]`
-- [x] GitHub Actions workflow (`.github/workflows/pages.yml`) publishing `web/`
+- [x] GitHub Actions workflow (`.github/workflows/static.yml`) publishing `web/`
       as the site root on push to `main`.
 - [ ] One-time: enable Pages (Settings → Pages → Source = GitHub Actions);
       then add the live URL + a screenshot/GIF to the README.
