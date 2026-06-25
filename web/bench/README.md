@@ -36,6 +36,17 @@ python -m http.server 8000
 - **Validate GPU vs Python reference** — renders LOS on the reference grid,
   reads it back, and reports max fp32 error against the float64 oracle.
 
+## Result so far
+
+On real GPU hardware the **Validate** button reports fp32 vs float64 LOS error
+of **~0.003% of the signal peak** (sub-millimeter) for the canonical scenario —
+so plain `highp` fp32 is sufficient; no double-precision emulation needed.
+
+GPU frame timing uses `EXT_disjoint_timer_query` for true GPU time-elapsed (the
+header shows whether it is available). If your first run showed implausibly fast,
+non-monotonic numbers, that was a single-end-of-loop sync measuring CPU dispatch
+instead of GPU execution — now fixed; re-run for honest per-frame GPU time.
+
 ## Files
 
 | File | Role |

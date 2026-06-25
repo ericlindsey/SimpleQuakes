@@ -183,20 +183,57 @@ for (const [key, label, min, max, step, unit] of sliders) {
 }
 
 // --- Benchmark: time the GPU compute pass (mode 1, float FBO) vs JS float64. ---
-async function benchGPU(n, frames = 60) {
-  const { fbo } = makeFloatFBO(n);
+// Naive "queue N draws, sync once" timing is wrong: the driver pipelines the
+// draws and the wall clock captures CPU dispatch, not GPU execution (and comes
+// out non-monotonic / implausibly fast). We use EXT_disjoint_timer_query for
+// true GPU time-elapsed when available, else force a per-frame sync so the
+// number is at worst an over-estimate -- never an under-count.
+function pollQuery(q) {
+  return new Promise((resolve) => {
+    const poll = () => {
+      const disjoint = gl.getParameter(timerExt.GPU_DISJOINT_EXT);
+      if (gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) {
+        const ns = disjoint ? null : gl.getQueryParameter(q, gl.QUERY_RESULT);
+        gl.deleteQuery(q);
+        resolve(ns);
+      } else setTimeout(poll, 1);
+    };
+    poll();
+  });
+}
+
+async function benchGPU(n, frames = 120) {
+  const { fbo, tex } = makeFloatFBO(n);
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.viewport(0, 0, n, n);
   setUniforms(n, n, view.extent, view.originX, view.originY, 1);
-  for (let i = 0; i < 5; i++) gl.drawArrays(gl.TRIANGLES, 0, 3); // warm up
   const px = new Float32Array(4);
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px); // force completion
-  const t0 = performance.now();
-  for (let i = 0; i < frames; i++) gl.drawArrays(gl.TRIANGLES, 0, 3);
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px); // sync on the last frame
-  const ms = (performance.now() - t0) / frames;
+  for (let i = 0; i < 8; i++) gl.drawArrays(gl.TRIANGLES, 0, 3); // warm up clocks
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px);
+
+  let ms, method;
+  if (timerExt) {
+    const q = gl.createQuery();
+    gl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
+    for (let i = 0; i < frames; i++) gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.endQuery(timerExt.TIME_ELAPSED_EXT);
+    gl.flush();
+    const ns = await pollQuery(q);
+    if (ns != null) { ms = ns / 1e6 / frames; method = "gpu-timer"; }
+  }
+  if (ms == null) { // no timer ext, or a disjoint event: per-frame sync fallback
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) {
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px); // stall until done
+    }
+    ms = (performance.now() - t0) / frames;
+    method = "sync";
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  return ms;
+  gl.deleteFramebuffer(fbo);
+  gl.deleteTexture(tex);
+  return { ms, method };
 }
 
 function benchCPU(n) {
@@ -219,19 +256,24 @@ function benchCPU(n) {
 document.getElementById("bench").addEventListener("click", async () => {
   out.textContent = "Benchmarking... (CPU is single-pass and may stutter)\n";
   const rows = [];
+  let method = "?";
   for (const n of [256, 512, 1024, 2048]) {
     const gpu = await benchGPU(n);
+    method = gpu.method;
     // Cap the CPU pass so the page stays responsive; skip the largest grids.
     const cpu = n <= 512 ? benchCPU(n).ms : null;
-    rows.push({ n, px: n * n, gpu, cpu });
-    out.textContent = render(rows);
+    rows.push({ n, px: n * n, gpu: gpu.ms, cpu });
+    out.textContent = render(rows, method);
     await new Promise(r => setTimeout(r, 0));
   }
   drawLive();
 });
 
-function render(rows) {
-  const head = "grid       pixels     GPU ms   GPU fps    CPU ms   speedup\n";
+function render(rows, method) {
+  const note = method === "gpu-timer"
+    ? "GPU timing: EXT_disjoint_timer_query (true GPU time-elapsed)"
+    : "GPU timing: per-frame sync fallback (upper bound; no timer ext)";
+  const head = note + "\n\ngrid       pixels     GPU ms   GPU fps    CPU ms   speedup\n";
   const body = rows.map(r => {
     const fps = (1000 / r.gpu).toFixed(0).padStart(7);
     const cpu = r.cpu == null ? "    skip" : r.cpu.toFixed(2).padStart(8);

@@ -74,6 +74,12 @@ expected to be visually fine for a teaching/visualization tool, but we will:
   fall back to CPU float for a thin near-fault band, or render at higher
   internal resolution.
 
+**Resolved (Step 4):** fp32 was measured on real GPU hardware at **0.0032% of
+the signal peak** (~0.009 mm) for the canonical scenario — comfortably within
+budget with the km-scaling + epsilon guards above. None of the fallbacks are
+needed for typical geometries. Keep an eye on extreme cases (observations on
+the fault trace, very shallow/near-vertical faults).
+
 ---
 
 ## 2. Milestones
@@ -110,18 +116,28 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 ### Step 3 — Micro-benchmark harness (validate the architecture choice)  `[~]`
 - [x] `web/bench/okada-bench.html` times the WebGL2 fragment-shader compute pass
       (256²–2048², ms/frame + fps) and the JS main-thread CPU port (256²/512²).
-- [ ] Add the Web Workers variant for a complete CPU comparison.
-- [ ] Record real device numbers here (run the page on target hardware) and
-      confirm/revise the WebGL2 recommendation.
+- [x] Fixed GPU timing to use `EXT_disjoint_timer_query` (true GPU
+      time-elapsed), with a per-frame-sync fallback. The first pass used a
+      single end-of-loop sync, which measured CPU dispatch (non-monotonic,
+      implausibly fast) rather than GPU execution.
+- [ ] Add the Web Workers variant for a complete CPU comparison (low priority
+      now: GPU dominance is unambiguous — even dispatch-bound it was sub-ms,
+      and the CPU port is ~100–300 ms at 256²–512²).
+- [ ] Record accurate on-device numbers here after re-running with the
+      timer-query path.
 
-### Step 4 — GLSL Okada engine + precision check  `[~]`
+### Step 4 — GLSL Okada engine + precision check  `[x]`
 - [x] `okada85.displacement` implemented in a GLSL ES 3.00 fragment shader
       (`web/bench/okada-shader.js`), in km, with the reference's edge/epsilon
       guards; branches only on the uniform `dip` (no cross-pixel divergence).
 - [x] Shader algebra verified in float64 (`check-shader-algo.mjs`) against the
       reference to ~1e-19 km — the restructured kernel is provably correct.
-- [ ] Read off fp32-vs-float64 error via the page's **Validate** button on real
-      GPUs; quantify near-fault error and decide mitigations if needed.
+- [x] **fp32 precision confirmed adequate on real GPU hardware.** Validate
+      button (reference scenario, 64² grid): max abs LOS error 8.7e-9 km vs a
+      2.77e-4 km signal peak = **0.0032% of peak** (~0.009 mm). No
+      double-precision emulation or near-fault CPU fallback needed; plain
+      `highp` fp32 is sufficient. Re-check if extreme geometries (very shallow,
+      near-vertical, observations on the fault trace) are exercised.
 
 ### Step 5 — InSAR fringes + colormap  `[ ]`
 - [ ] LOS projection from heading + incidence angle → unit look vector;
