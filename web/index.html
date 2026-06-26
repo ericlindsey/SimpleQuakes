@@ -27,7 +27,6 @@
   h1 small { font-weight: 400; color: #9aa; margin-left: 6px; }
   #collapse { background: none; border: 0; color: #ccd; font-size: 18px;
     cursor: pointer; line-height: 1; padding: 0 4px; }
-  .panel.collapsed #body { display: none; }
 
   .group { margin-top: 12px; }
   .gtitle { text-transform: uppercase; font-size: 10px; letter-spacing: 0.8px;
@@ -76,6 +75,11 @@
   #aboutbox p { margin: 8px 0; }
   #aboutbox code { background: rgba(255,255,255,0.08); padding: 0 4px; border-radius: 4px; }
   #aboutlink { cursor: pointer; }
+  /* About swaps body<->aboutbox; collapse (declared last) wins over both. */
+  .panel.show-about #body { display: none; }
+  .panel.show-about #aboutbox { display: block; }
+  .panel.collapsed #body,
+  .panel.collapsed #aboutbox { display: none; }
 
   /* lower-right info panel: colorbar + stats */
   #infopanel { position: fixed; bottom: 12px; right: 12px; width: 250px;

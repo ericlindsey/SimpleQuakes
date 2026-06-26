@@ -408,16 +408,15 @@ document.getElementById("collapse").addEventListener("click", () => {
   document.getElementById("collapse").textContent = panel.classList.contains("collapsed") ? "+" : "–";
 });
 
-// About panel toggles the control body in place.
-const aboutBox = document.getElementById("aboutbox");
-const bodyEl = document.getElementById("body");
+// About swaps the control body in place. Class-based so it never fights the
+// collapse toggle over inline display styles.
+const panelEl = document.getElementById("panel");
 const aboutLink = document.getElementById("aboutlink");
 function setAbout(show) {
-  aboutBox.style.display = show ? "block" : "none";
-  bodyEl.style.display = show ? "none" : "block";
+  panelEl.classList.toggle("show-about", show);
   aboutLink.textContent = show ? "controls" : "about";
 }
-aboutLink.addEventListener("click", () => setAbout(aboutBox.style.display !== "block"));
+aboutLink.addEventListener("click", () => setAbout(!panelEl.classList.contains("show-about")));
 document.getElementById("aboutback").addEventListener("click", () => setAbout(false));
 
 window.addEventListener("resize", requestRender);
