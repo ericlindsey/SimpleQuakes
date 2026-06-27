@@ -1,4 +1,4 @@
-# SimpleQuakes — Development Plan
+# VisualQuakes — Development Plan
 
 A single-page, static website (GitHub Pages) that visualizes surface
 deformation from one rectangular dislocation (Okada, 1985). The headline
@@ -88,7 +88,7 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 
 ### Step 0 — Repo scaffold and reference engine  `[x]`
 - [x] Copy Okada85 reference + tests from `geodef` into `python/` (package
-      `simplequakes`); 45 tests passing.
+      `visualquakes`); 45 tests passing.
 - [x] Adapt `CLAUDE.md` / `AGENTS.md` for a web-first repo; add `.gitignore`.
 - [x] Write this `PLAN.md`.
 
@@ -214,7 +214,7 @@ Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 
 ## 4. Validation philosophy
 
-The Python `simplequakes.okada85` (float64, 45 passing tests, traceable to the
+The Python `visualquakes.okada85` (float64, 45 passing tests, traceable to the
 original Beauducel/Lindsey Matlab reference) is the **source of truth**. Every
 browser engine — JS, and especially the GLSL shader — is checked against it.
 Correctness is pinned to the reference; performance is measured, not assumed

@@ -1,4 +1,4 @@
-// SimpleQuakes interactive app. Drives the WebGL2 Okada shader: continuous
+// VisualQuakes interactive app. Drives the WebGL2 Okada shader: continuous
 // sliders + exact-entry number boxes, full-window canvas, InSAR view modes,
 // pan/zoom, fault overlay, presets, and shareable URL state. All heavy compute
 // lives in the fragment shader; here we only push uniforms and redraw.

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from simplequakes import okada85
+from visualquakes import okada85
 
 # Canonical scenario, all lengths in km (keeps shader coordinates O(1-100)
 # so fp32 retains mantissa bits). slip = 1e-3 km == 1 m.

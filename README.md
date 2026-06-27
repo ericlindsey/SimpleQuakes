@@ -1,4 +1,4 @@
-# SimpleQuakes
+# VisualQuakes
 
 A simple, interactive website for visualizing geodetic deformation from an
 earthquake, idealized as a **single rectangular dislocation** in an elastic

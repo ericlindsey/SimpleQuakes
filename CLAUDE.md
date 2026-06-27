@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**SimpleQuakes** is a simple, interactive website for visualizing geodetic
+**VisualQuakes** is a simple, interactive website for visualizing geodetic
 deformation from an earthquake, idealized as a **single rectangular dislocation
 in an elastic half-space** (Okada, 1985). The user adjusts fault parameters with
 sliders (strike, dip, rake, depth, length, width, slip) and an InSAR viewing
@@ -26,14 +26,14 @@ implementation and validation oracle; it is not shipped to the browser.
 ## Repository Layout
 
 ```
-SimpleQuakes/
+VisualQuakes/
 ├── CLAUDE.md              # This file
 ├── AGENTS.md              # Same guidance for non-Claude agents
 ├── PLAN.md                # Development roadmap (read before starting work)
 ├── README.md
 ├── python/                # Reference implementation + validation (NOT shipped)
 │   ├── pyproject.toml
-│   ├── src/simplequakes/
+│   ├── src/visualquakes/
 │   │   ├── __init__.py
 │   │   └── okada85.py     # Okada (1985) displacement/tilt/strain (NumPy, float64)
 │   └── tests/
@@ -45,7 +45,7 @@ SimpleQuakes/
 
 ## The deformation engine
 
-`python/src/simplequakes/okada85.py` is the reference. It exposes three
+`python/src/visualquakes/okada85.py` is the reference. It exposes three
 vectorized NumPy functions for surface (z=0) observations:
 
 | Function | Returns |
@@ -76,7 +76,7 @@ fragment-shader implementation the natural fastest path (see `PLAN.md`).
   unit when you complete or change a step.
 - **Validate the browser engine against the Python reference.** Any port of
   Okada85 (JS / WASM / GLSL / WGSL) must be checked against
-  `python/src/simplequakes/okada85.py` to an appropriate tolerance (float64 for
+  `python/src/visualquakes/okada85.py` to an appropriate tolerance (float64 for
   CPU ports; relaxed fp32 tolerance for shader ports).
 - **Keep it deployable to GitHub Pages.** No server-side code. Prefer plain
   static files or a build that emits a static `dist/`. Keep runtime

@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           # Publish only the site directory so index.html is the site root
-          # (the app lands at <user>.github.io/SimpleQuakes/, not /web/).
+          # (the app lands at <user>.github.io/visualquakes/, not /web/).
           path: 'web'
       - name: Deploy to GitHub Pages
         id: deployment

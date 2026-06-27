@@ -1,6 +1,6 @@
-// Float64 JavaScript port of simplequakes.okada85.displacement (Okada, 1985).
+// Float64 JavaScript port of visualquakes.okada85.displacement (Okada, 1985).
 //
-// A faithful, scalar transcription of python/src/simplequakes/okada85.py used
+// A faithful, scalar transcription of python/src/visualquakes/okada85.py used
 // (a) as the CPU baseline in the benchmark and (b) as the correctness oracle
 // for the GLSL shader. Kept structurally identical to the Python reference:
 // setup_args -> chinnery -> strike-slip / dip-slip / tensile subfunctions.

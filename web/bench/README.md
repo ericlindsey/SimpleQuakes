@@ -1,6 +1,6 @@
 # Okada WebGL2 proof-of-concept + benchmark
 
-A minimal, framework-free probe of the core SimpleQuakes bet: **run the full
+A minimal, framework-free probe of the core VisualQuakes bet: **run the full
 Okada (1985) kernel once per pixel in a WebGL2 fragment shader**, so dragging a
 slider is just a uniform update + one redraw.
 
