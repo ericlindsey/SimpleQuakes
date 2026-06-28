@@ -30,6 +30,7 @@ VisualQuakes/
 ├── CLAUDE.md              # This file
 ├── AGENTS.md              # Same guidance for non-Claude agents
 ├── PLAN.md                # Development roadmap (read before starting work)
+├── benchmarks.md          # Rendering rationale + measured GPU/precision numbers
 ├── README.md
 ├── python/                # Reference implementation + validation (NOT shipped)
 │   ├── pyproject.toml
@@ -66,7 +67,7 @@ Conventions (shared by reference and the browser port):
 For the interactive app, the per-pixel hot path is `displacement` projected onto
 the InSAR line-of-sight, then wrapped to fringes. The closed-form Okada formula
 is **embarrassingly parallel per observation point** — this is what makes a GPU
-fragment-shader implementation the natural fastest path (see `PLAN.md`).
+fragment-shader implementation the natural fastest path (see `benchmarks.md`).
 
 ---
 

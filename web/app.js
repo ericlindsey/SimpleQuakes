@@ -150,6 +150,22 @@ function render() {
 
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   updateReadout();
+  updateScaleBar();
+}
+
+// Scale bar: pick a round distance (1/2/5 × 10ⁿ) whose on-screen width is at
+// most ~120 CSS px at the current zoom, then size the bracket to match.
+function updateScaleBar() {
+  const h = canvas.clientHeight;
+  if (!h) return;
+  const kmPerPx = (2 * state.cam.extent) / h; // CSS px
+  const rawKm = kmPerPx * 120;
+  const pow = Math.pow(10, Math.floor(Math.log10(rawKm)));
+  const frac = rawKm / pow;
+  const km = (frac >= 5 ? 5 : frac >= 2 ? 2 : 1) * pow;
+  document.getElementById("scaleline").style.width = `${Math.round(km / kmPerPx)}px`;
+  document.getElementById("scalelabel").textContent =
+    km >= 1 ? `${km} km` : `${Math.round(km * 1000)} m`;
 }
 
 let pending = false;
@@ -348,37 +364,83 @@ function readUrl() {
 function onChange() { requestRender(); updateLegend(); scheduleUrl(); }
 
 // ------------------------------------------------------------- pan / zoom
-let dragging = false, lastX = 0, lastY = 0;
+// Zoom about a screen point (sx, sy in CSS px): rescale extent by `factor` while
+// keeping the world point under the cursor/pinch-center fixed.
+function zoomAbout(sx, sy, factor) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (sx - rect.left) / rect.width, my = (sy - rect.top) / rect.height;
+  const aspect = rect.width / rect.height;
+  const eyB = state.cam.extent, exB = eyB * aspect;
+  const wx = state.cam.ox + (mx * 2 - 1) * exB;
+  const wy = state.cam.oy + ((1 - my) * 2 - 1) * eyB;
+  state.cam.extent = clamp(eyB * factor, 0.5, 5000);
+  const eyA = state.cam.extent, exA = eyA * aspect;
+  state.cam.ox = wx - (mx * 2 - 1) * exA;
+  state.cam.oy = wy - ((1 - my) * 2 - 1) * eyA;
+}
+
+// Track all active pointers so one finger pans and two fingers pinch-zoom (with
+// two-finger pan of the midpoint). Mouse drag is just the single-pointer case.
+const pointers = new Map();
+let dragging = false, lastX = 0, lastY = 0, pinch = null;
+
+const pinchInfo = () => {
+  const [a, b] = [...pointers.values()];
+  return { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+};
+
 canvas.addEventListener("pointerdown", (e) => {
-  dragging = true; lastX = e.clientX; lastY = e.clientY;
-  canvas.classList.add("dragging"); canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  canvas.setPointerCapture(e.pointerId);
+  if (pointers.size === 1) {
+    dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.classList.add("dragging");
+  } else if (pointers.size === 2) {
+    dragging = false; canvas.classList.remove("dragging"); pinch = pinchInfo();
+  }
 });
+
 canvas.addEventListener("pointermove", (e) => {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  p.x = e.clientX; p.y = e.clientY;
+
+  if (pointers.size >= 2) {
+    const info = pinchInfo();
+    if (pinch) {
+      if (info.dist > 0 && pinch.dist > 0) zoomAbout(info.mx, info.my, pinch.dist / info.dist);
+      const kmPerPx = (2 * state.cam.extent) / canvas.clientHeight;
+      state.cam.ox -= (info.mx - pinch.mx) * kmPerPx;
+      state.cam.oy += (info.my - pinch.my) * kmPerPx;
+      onChange();
+    }
+    pinch = info;
+    return;
+  }
+
   if (!dragging) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const kmPerPx = (2 * state.cam.extent) / (canvas.clientHeight * dpr) * dpr;
+  const kmPerPx = (2 * state.cam.extent) / canvas.clientHeight; // CSS px
   state.cam.ox -= (e.clientX - lastX) * kmPerPx;
   state.cam.oy += (e.clientY - lastY) * kmPerPx; // screen y down -> north up
   lastX = e.clientX; lastY = e.clientY;
   onChange();
 });
-const endDrag = () => { dragging = false; canvas.classList.remove("dragging"); };
-canvas.addEventListener("pointerup", endDrag);
-canvas.addEventListener("pointercancel", endDrag);
+
+const dropPointer = (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (pointers.size === 0) {
+    dragging = false; canvas.classList.remove("dragging");
+  } else if (pointers.size === 1) {
+    const [p] = [...pointers.values()];      // resume single-finger pan
+    lastX = p.x; lastY = p.y; dragging = true; canvas.classList.add("dragging");
+  }
+};
+canvas.addEventListener("pointerup", dropPointer);
+canvas.addEventListener("pointercancel", dropPointer);
 
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) / rect.width;       // 0..1
-  const my = (e.clientY - rect.top) / rect.height;
-  const aspect = rect.width / rect.height;
-  const eyBefore = state.cam.extent, exBefore = eyBefore * aspect;
-  const wx = state.cam.ox + (mx * 2 - 1) * exBefore;
-  const wy = state.cam.oy + ((1 - my) * 2 - 1) * eyBefore;
-  state.cam.extent = clamp(eyBefore * Math.exp(e.deltaY * 0.0012), 0.5, 5000);
-  const eyAfter = state.cam.extent, exAfter = eyAfter * aspect;
-  state.cam.ox = wx - (mx * 2 - 1) * exAfter;            // keep cursor point fixed
-  state.cam.oy = wy - ((1 - my) * 2 - 1) * eyAfter;
+  zoomAbout(e.clientX, e.clientY, Math.exp(e.deltaY * 0.0012));
   onChange();
 }, { passive: false });
 
@@ -418,6 +480,19 @@ function setAbout(show) {
 }
 aboutLink.addEventListener("click", () => setAbout(!panelEl.classList.contains("show-about")));
 document.getElementById("aboutback").addEventListener("click", () => setAbout(false));
+
+// On phones, move the info panel (colorbar + stats) inside the main control
+// panel so the two glass panes merge into one scrollable bottom sheet instead
+// of overlapping. On wider screens it lives free-floating at lower-right.
+const infoPanel = document.getElementById("infopanel");
+const mobileMq = window.matchMedia("(max-width: 640px)");
+function applyLayout() {
+  if (mobileMq.matches) document.getElementById("panel").append(infoPanel);
+  else document.body.append(infoPanel);
+  requestRender(); // scale-bar width depends on the canvas height, which shifts
+}
+mobileMq.addEventListener("change", applyLayout);
+applyLayout();
 
 window.addEventListener("resize", requestRender);
 window.addEventListener("hashchange", () => {

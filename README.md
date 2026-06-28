@@ -15,10 +15,18 @@ Python reference).
 
 Interactive site is up: a full-window WebGL2 canvas with a translucent control
 panel — continuous sliders (with exact-entry boxes) for the fault and InSAR
-geometry, wrapped-fringe / LOS / E / N / Up views, pan & zoom, a fault overlay,
-presets, and shareable URL state. The Okada solution runs per pixel in a
-fragment shader, validated against the Python reference. See [`PLAN.md`](PLAN.md)
-for the roadmap and the rationale for the rendering approach.
+geometry, wrapped-fringe / LOS / E / N / Up views, pan / wheel-zoom / pinch-zoom,
+a fault overlay, a scale bar, presets, and shareable URL state. The layout
+collapses to a single scrollable panel on mobile. The Okada solution runs per
+pixel in a fragment shader, validated against the Python reference.
+
+See [`PLAN.md`](PLAN.md) for the roadmap and [`benchmarks.md`](benchmarks.md) for
+the rationale and measured numbers behind the rendering approach.
+
+**Live site:** https://ericlindsey.github.io/visualquakes/
+
+![VisualQuakes — wrapped InSAR fringes from a shallow dip-slip fault](docs/screenshot.png)
+
 
 ## Layout
 
@@ -42,7 +50,7 @@ python -m http.server 8000
 # open http://localhost:8000/
 ```
 
-Deployment to GitHub Pages is automated (`.github/workflows/pages.yml`); enable
+Deployment to GitHub Pages is automated (`.github/workflows/static.yml`); enable
 it once via Settings → Pages → Source = "GitHub Actions".
 
 ## Reference engine (Python)
