@@ -45,9 +45,10 @@ centroid-to-Okada conversion exactly in any port.
 
 Status keys: `[ ]` todo · `[~]` in progress · `[x]` done.
 
-### Ship the live site `[~]`
-- [ ] One-time: enable Pages (Settings → Pages → Source = GitHub Actions).
-- [ ] Add the live URL + a screenshot/GIF to the README once it's up.
+### Ship the live site `[x]`
+- [x] Enable Pages (Settings → Pages → Source = GitHub Actions); live at
+      https://ericlindsey.github.io/visualquakes/.
+- [x] Add the live URL + a screenshot to the README.
 
 ### USGS event import `[ ]`
 - [ ] Accept a **USGS event ID** (e.g. from the ComCat / earthquake.usgs.gov

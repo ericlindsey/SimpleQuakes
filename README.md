@@ -23,8 +23,9 @@ pixel in a fragment shader, validated against the Python reference.
 See [`PLAN.md`](PLAN.md) for the roadmap and [`benchmarks.md`](benchmarks.md) for
 the rationale and measured numbers behind the rendering approach.
 
-<!-- TODO: add a screenshot/GIF of the running site here once Pages is live. -->
-<!-- ![VisualQuakes](docs/screenshot.png) -->
+**Live site:** https://ericlindsey.github.io/visualquakes/
+
+![VisualQuakes — wrapped InSAR fringes from a shallow dip-slip fault](docs/screenshot.png)
 
 
 ## Layout
